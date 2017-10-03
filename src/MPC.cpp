@@ -8,8 +8,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 12;
-double dt = 0.05;
+size_t N = 14;// 9; //8;// 16;
+double dt = 0.05;//0.1;// 0.05;
 
 const double Lf = 2.67;
 
@@ -38,7 +38,7 @@ class FG_eval {
   double squared(double in) { return(pow(in,2)); }
   CppAD::AD<double> squared(CppAD::AD<double> in) { return(CppAD::pow(in,2)); }
 
-  double ref_v = 75.0 * 1609 / 3600; // reference velocity to try to be close to;
+  double ref_v = 60.0 * 1609 / 3600; // reference velocity to try to be close to;
   double ref_epsi = 0.0;
   double ref_cte = 0.0;
   double ref_delta = 0.0; // keep steering close to straight as possible
@@ -48,20 +48,20 @@ class FG_eval {
 
 
   //bias against cte
-  double cte_factor = 500.0;
+  double cte_factor = 250.0;//500.0
   //bias against steer error
-  double epsi_factor = 500.0;
+  double epsi_factor = 10000.0;
   //bias against changing velocity from a good speed
-  double v_factor = 1.0;
+  double v_factor = 5.0;
   //bias against large steer in cost funcs
-  double steer_factor = 5.0; //set these up, need way to manipulate from outside
+  double steer_factor = 5000.0; //set these up, need way to manipulate from outside
   //bias against large accel/deccel in cost funcs
-  double accel_factor = 1.0; //set these up, need way to manipulate from outside
+  double accel_factor = 5.0; //set these up, need way to manipulate from outside
   //bias against jerky steer in cost funcs
   double delta_factor = 5000.0; //set these up, need way to manipulate from outside
   //bias against large accel/deccel in cost funcs
   double delta_a_factor = 5.0; //set these up, need way to manipulate from outside
-  double delta_cte_factor = 5000.0;//
+  double delta_cte_factor = 10000;// 5000.0;//
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   // `fg` is a vector containing the cost and constraints.

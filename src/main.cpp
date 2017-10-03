@@ -76,12 +76,17 @@ int run_message_loop()
   int step = 0;
   int order = 4;// 3;//polyfit equation of this order
   uWS::Hub h;
+  // this works for start at beginning of track - could put whole waypoint array in here to make more robust.
+  double old_ptsx0 = -24.01;
+  double old_ptsy0 = 119.02;
+  double old_ptsx1 = -32.16173;
+  double old_ptsy1 = 113.361;
 
   // MPC is initialized here!
   MPC mpc;
   
 
-  h.onMessage([&mpc, &step, &order](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&mpc, &step, &order, &old_ptsx0, &old_ptsx1, &old_ptsy0, &old_ptsy1](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -98,8 +103,31 @@ int run_message_loop()
         if (event == "telemetry") {
           step += 1;
           // j[1] is the data JSON object
+  
           vector<double> ptsx = j[1]["ptsx"];
           vector<double> ptsy = j[1]["ptsy"];
+          cout << "input ptsx: " << ptsx[0] << ", " << ptsx[1] << ", " << ptsx[2] << endl;
+          cout << "input ptsy: " << ptsy[0] << ", " << ptsy[1] << ", " << ptsy[2] << endl;
+          cout << "old_ptsx1:  " << old_ptsx1 << endl;
+          cout << "old_ptsy1:  " << old_ptsy1 << endl;
+          if( (fabs(old_ptsx1 - ptsx[0] ) > 0.1) or (fabs(old_ptsy1 - ptsy[0]) > 0.1) )
+          {
+            cout << "sliding waypoints along!" << endl;
+            old_ptsx0 = old_ptsx1;
+            old_ptsy0 = old_ptsy1;
+            old_ptsx1 = ptsx[0];
+            old_ptsy1 = ptsy[0];
+          }
+          ptsx.insert(ptsx.begin( ), old_ptsx0);
+          ptsy.insert(ptsy.begin( ), old_ptsy0);
+          //don't look so far down road
+          
+          for (int i = 0; i < 1; i++)
+          {
+            ptsx.pop_back( );
+            ptsy.pop_back( );
+          }
+
           double px = j[1]["x"];
           double py = j[1]["y"];
           double psi = j[1]["psi"];
@@ -108,6 +136,11 @@ int run_message_loop()
           // just to check applied correctly from last actuation
           double throt = j[1]["throttle"];
           double steer = j[1]["steering_angle"];
+
+          //calculate a new car position based on 100 mS latency
+          
+          //px = px + (v + throt/
+          //psi = 
 
           cout << "step = " << step << endl;
           cout << ", x = " << px << ", y = " << py << ", psi = " << psi << ", v = " << v << ", throt = " << throt <<
@@ -153,7 +186,7 @@ int run_message_loop()
           //since px and py translated to 0,0 to car perspective
           double cte = polyeval(coeffs, 0.0) - 0.0;
           cout << "cte is : " << cte ;
-          if (fabs(cte) > 5.0)
+          if (fabs(cte) > 10.0)
           {
             cout << endl << endl;
             cout << "ERROR:: Car off track - cte value exceeds 5 - EXITING!" << endl << endl;
@@ -188,8 +221,9 @@ int run_message_loop()
           vector<double> next_x_vals;
           vector<double> next_y_vals;
           double poly_inc = Lf; //distance from centroid of car to front of car
-          size_t num_points = 20;
-          for (i = 0; i < num_points; i++)
+          int num_points = 8;
+          //make 
+          for (int i = -1; i < num_points; i++)
           {
             next_x_vals.push_back((i + 1)*poly_inc);
             next_y_vals.push_back( polyeval(coeffs, (i + 1)*poly_inc) );
