@@ -8,8 +8,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 14;// 9; //8;// 16;
-double dt = 0.05;//0.1;// 0.05;
+size_t N = 16;// 12;// 16; // 4;// 9; //8;// 16;
+double dt = 0.05;// 0.05;//0.1;// 0.05;
 
 const double Lf = 2.67;
 
@@ -27,9 +27,17 @@ size_t a_start = delta_start + N - 1;
 
 class FG_eval {
  public:
+  double ref_v; //reference velocity to try to be close to;
+  double ref_a;
   // Fitted polynomial coefficients
   Eigen::VectorXd coeffs;
-  FG_eval(Eigen::VectorXd coeffs) { this->coeffs = coeffs; }
+
+  FG_eval(Eigen::VectorXd coeffs, double desired_velocity) 
+  { 
+    this->coeffs = coeffs; 
+    this->ref_v = desired_velocity * 1609 / 3600;
+    this->ref_a = desired_velocity / 100;
+  }
 
   size_t t;//timestep counter
   int i;//counter
@@ -38,57 +46,73 @@ class FG_eval {
   double squared(double in) { return(pow(in,2)); }
   CppAD::AD<double> squared(CppAD::AD<double> in) { return(CppAD::pow(in,2)); }
 
-  double ref_v = 60.0 * 1609 / 3600; // reference velocity to try to be close to;
+  //
   double ref_epsi = 0.0;
   double ref_cte = 0.0;
   double ref_delta = 0.0; // keep steering close to straight as possible
-  double ref_a = 0.0; //keep accel/deccel close to 0 as possible
+//  double ref_a = 0.0; //keep accel/deccel close to 0 as possible
   double ref_delta_a = 0.0;
   double ref_delta_delta = 0.0;
 
 
   //bias against cte
-  double cte_factor = 250.0;//500.0
+  double cte_factor = 5000;// 2000 - was good;//2000// 350.0;//500.0
+  //double cte_factor = 750;// 500.0;
   //bias against steer error
-  double epsi_factor = 10000.0;
+  double epsi_factor = 500.0;//5000
+  //double epsi_factor = 1200; //2500;// 400.0;
   //bias against changing velocity from a good speed
   double v_factor = 5.0;
+  //double v_factor = 10.0;
   //bias against large steer in cost funcs
-  double steer_factor = 5000.0; //set these up, need way to manipulate from outside
+  double steer_factor = 0.5; 
+  //double steer_factor = 0.0; 
   //bias against large accel/deccel in cost funcs
-  double accel_factor = 5.0; //set these up, need way to manipulate from outside
+  double accel_factor = 2.0; 
+  //double accel_factor = 25.0; //10.0
   //bias against jerky steer in cost funcs
-  double delta_factor = 5000.0; //set these up, need way to manipulate from outside
-  //bias against large accel/deccel in cost funcs
-  double delta_a_factor = 5.0; //set these up, need way to manipulate from outside
-  double delta_cte_factor = 10000;// 5000.0;//
+  double delta_factor = 2.0;//5.0 //2.0
+  //double delta_factor = 0.0;// 20.0;
+  //bias against large changes in accel/deccel in cost funcs
+  double delta_a_factor = 3.0;//2.0
+  //double delta_a_factor = 10.0;
+  //bias against constantly changing cte 
+  double delta_cte_factor = 500000;//100000;// 10000;// 5000.0;//
+  //double delta_cte_factor = 7500.0;
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
+
   // `fg` is a vector containing the cost and constraints.
   // `vars` is a vector containing the variable values (state & actuators).
-  void operator()(ADvector& fg, const ADvector& vars ) {
+  void operator()(ADvector& fg, const ADvector& vars) {
+    
     fg[0] = 0;
 
     // Reference State Cost
     //
     for (t = 0; t < N; t++)
     {
-      fg[0] += cte_factor * squared(vars[cte_start + t] - ref_cte); //minimize cross track error
-      fg[0] += epsi_factor * squared(vars[epsi_start + t] - ref_epsi); //minimize direction error
-      fg[0] += v_factor * squared(vars[v_start + t] - ref_v); //add this in to make sure we don't stop during un
+      fg[0] += cte_factor * squared(vars[cte_start + t] - ref_cte);// *(t + 5);// (t + 5);// (t + 1); //minimize cross track error
+      fg[0] += epsi_factor * squared(vars[epsi_start + t] - ref_epsi);// *(t + 2);// (t + 5); //minimize direction error
+      fg[0] += v_factor * squared(vars[v_start + t] - ref_v);// (t + 5); //try to maintain a target speed
     }
 
     // Minimize the use of actuators.
     for (t = 0; t < N - 1; t++) {
-      fg[0] += steer_factor * squared(vars[delta_start + t] - ref_delta);  //minimize steering angles
-      fg[0] += accel_factor * squared(vars[a_start + t] - ref_a);  //minimize use of accelerator/brake
+      fg[0] += steer_factor * squared(vars[delta_start + t] - ref_delta);// *(t + 3);// (t + 5);  //minimize steering angles
+      fg[0] += accel_factor * squared(vars[a_start + t] - ref_a);// (t + 5);  //minimize use of accelerator/brake
     }
 
     // Minimize the value gap between sequential actuations.
-    for (t = 0; t < N - 2; t++) {
-      fg[0] += delta_factor * squared((vars[delta_start + t + 1] - vars[delta_start + t]) - ref_delta_delta); //remove jerkiness in steering
-      fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a) ; //remove jerkiness in acceleration/braking
-      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte); //minimize change in cte (similar to steer reduction?
+    for (t = 0; t < N - 2; t++)
+    {
+      fg[0] += delta_factor * squared((vars[delta_start + t + 1] - vars[delta_start + t]) - ref_delta_delta);// (t + 5); //remove jerkiness in steering
+      fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a);// (t + 5); //remove jerkiness in acceleration/braking
+    }
+
+    for (t = 2; t < N - 1; t++) //do't worry if start of 
+    {
+      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte);// *(t + 3);// (t + 5); //minimize change in cte (similar to steer reduction?
     }
 
     //
@@ -126,14 +150,7 @@ class FG_eval {
       AD<double> a0 = vars[a_start + t - 1];
       AD<double> delta0 = vars[delta_start + t - 1];
 
-//     if (t > 1)
-//     {   // use previous actuations (to account for latency)
-//       a = vars[a_start + t - 2];
-//       delta = vars[delta_start + t - 2];
-//     }
-      
-      //set up to be flexible based on order of equation
-      
+      //set up to be flexible based on order of equation    
       AD<double> f0 = 0.0;
       for (i = 0; i < coeffs.size( ); i++)
       {
@@ -165,7 +182,7 @@ class FG_eval {
 MPC::MPC() {}
 MPC::~MPC() {}
 
-vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
+vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, double desired_velocity) {
   bool ok = true;
   size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
@@ -222,7 +239,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Acceleration/decceleration upper and lower limits.
   // try using -0.5 , 0.5
   for (i = a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = -1.0;// -1.0;
+    vars_lowerbound[i] = 0.0;// -1.0;
     vars_upperbound[i] = 0.95;// 1.0;
   }
 
@@ -250,7 +267,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   constraints_upperbound[epsi_start] = epsi;
 
   // object that computes objective and constraints
-  FG_eval fg_eval(coeffs);
+  FG_eval fg_eval(coeffs, desired_velocity);
 
   //
   // NOTE: You don't have to worry about these options
@@ -282,7 +299,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   // Cost
-  auto cost = solution.obj_value;
+  //auto cost = solution.obj_value;
   //std::cout << "Cost " << cost << std::endl;
 
   // TODO: Return the first actuator values. The variables can be accessed with
