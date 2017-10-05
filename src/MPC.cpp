@@ -7,85 +7,103 @@
 
 using CppAD::AD;
 
-// TODO: Set the timestep length and duration
-size_t N = 16;// 12;// 16; // 4;// 9; //8;// 16;
-double dt = 0.05;// 0.05;//0.1;// 0.05;
-
 const double Lf = 2.67;
 
-// The solver takes all the state variables and actuator
-// variables in a singular vector. Thus, we should to establish
-// when one variable starts and another ends to make our lifes easier.
-size_t x_start = 0;
-size_t y_start = x_start + N;
-size_t psi_start = y_start + N;
-size_t v_start = psi_start + N;
-size_t cte_start = v_start + N;
-size_t epsi_start = cte_start + N;
-size_t delta_start = epsi_start + N;
-size_t a_start = delta_start + N - 1;
 
-class FG_eval {
- public:
+
+class FG_eval
+{
+public:
   double ref_v; //reference velocity to try to be close to;
   double ref_a;
   // Fitted polynomial coefficients
   Eigen::VectorXd coeffs;
 
-  FG_eval(Eigen::VectorXd coeffs, double desired_velocity) 
-  { 
-    this->coeffs = coeffs; 
-    this->ref_v = desired_velocity * 1609 / 3600;
-    this->ref_a = desired_velocity / 100;
+  size_t N;// = 16;// 12;// 16; // 4;// 9; //8;// 16;
+  double dt;// = 0.05;// 0.05;//0.1;// 0.05;
+  double cte_factor;
+  double epsi_factor;
+  double v_factor;
+  double steer_factor;
+  double accel_factor;
+  double delta_factor;
+  double delta_a_factor;
+  double delta_cte_factor;
+
+  FG_eval(Eigen::VectorXd coeffs, double desired_velocity, double time_interval, size_t timesteps)
+  {
+    this->coeffs = coeffs;
+    ref_v = desired_velocity * 1609 / 3600;
+    ref_a = desired_velocity / 100;
+    N = timesteps;
+    if (time_interval == 0.05)
+    {
+      dt = 0.05;
+      //bias against cte
+      cte_factor = 7500;//5000;// 2000 - was good;//2000// 350.0;//500.0
+      //bias against steer error
+      epsi_factor = 500.0;//500;//5000
+      //bias against changing velocity from a good speed
+      v_factor = 5.0;
+      //bias against large steer in cost funcs
+      steer_factor = 0.0;//0.5;
+      //bias against large accel/deccel in cost funcs
+      accel_factor = 10.0;
+      //bias against jerky steer in cost funcs
+      delta_factor = 1.0;//5.0 //2.0
+      //bias against large changes in accel/deccel in cost funcs
+      delta_a_factor = 3.0;//2.0
+      //bias against constantly changing cte 
+      delta_cte_factor = 750000;// 500000;//100000;// 10000;// 5000.0;//
+    }
+    else
+    {
+      // parameters determined for timestep of 0.1 s;
+      dt = time_interval;
+      cte_factor = 3750;
+      epsi_factor = 2400;
+      v_factor = 10.0;
+      steer_factor = 0.0;
+      accel_factor = 125.0;
+      delta_factor = 0.0;
+      delta_a_factor = 10.0;
+      delta_cte_factor = 22500.0;
+    }
+    cout << "fg set dt = " << this->dt << ", for " << this->N << " timesteps." << endl;
   }
 
   size_t t;//timestep counter
   int i;//counter
 
   //helper function to return square of a number
-  double squared(double in) { return(pow(in,2)); }
-  CppAD::AD<double> squared(CppAD::AD<double> in) { return(CppAD::pow(in,2)); }
+  double squared(double in) { return(pow(in, 2)); }
+  CppAD::AD<double> squared(CppAD::AD<double> in) { return(CppAD::pow(in, 2)); }
 
   //
   double ref_epsi = 0.0;
   double ref_cte = 0.0;
   double ref_delta = 0.0; // keep steering close to straight as possible
-//  double ref_a = 0.0; //keep accel/deccel close to 0 as possible
   double ref_delta_a = 0.0;
   double ref_delta_delta = 0.0;
-
-
-  //bias against cte
-  double cte_factor = 5000;// 2000 - was good;//2000// 350.0;//500.0
-  //double cte_factor = 750;// 500.0;
-  //bias against steer error
-  double epsi_factor = 500.0;//5000
-  //double epsi_factor = 1200; //2500;// 400.0;
-  //bias against changing velocity from a good speed
-  double v_factor = 5.0;
-  //double v_factor = 10.0;
-  //bias against large steer in cost funcs
-  double steer_factor = 0.5; 
-  //double steer_factor = 0.0; 
-  //bias against large accel/deccel in cost funcs
-  double accel_factor = 2.0; 
-  //double accel_factor = 25.0; //10.0
-  //bias against jerky steer in cost funcs
-  double delta_factor = 2.0;//5.0 //2.0
-  //double delta_factor = 0.0;// 20.0;
-  //bias against large changes in accel/deccel in cost funcs
-  double delta_a_factor = 3.0;//2.0
-  //double delta_a_factor = 10.0;
-  //bias against constantly changing cte 
-  double delta_cte_factor = 500000;//100000;// 10000;// 5000.0;//
-  //double delta_cte_factor = 7500.0;
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
 
   // `fg` is a vector containing the cost and constraints.
   // `vars` is a vector containing the variable values (state & actuators).
   void operator()(ADvector& fg, const ADvector& vars) {
-    
+
+    // The solver takes all the state variables and actuator
+    // variables in a singular vector. Thus, we should to establish
+    // when one variable starts and another ends to make our lifes easier.
+    size_t x_start = 0;
+    size_t y_start = x_start + N;
+    size_t psi_start = y_start + N;
+    size_t v_start = psi_start + N;
+    size_t cte_start = v_start + N;
+    size_t epsi_start = cte_start + N;
+    size_t delta_start = epsi_start + N;
+    size_t a_start = delta_start + N - 1;
+
     fg[0] = 0;
 
     // Reference State Cost
@@ -94,25 +112,25 @@ class FG_eval {
     {
       fg[0] += cte_factor * squared(vars[cte_start + t] - ref_cte);// *(t + 5);// (t + 5);// (t + 1); //minimize cross track error
       fg[0] += epsi_factor * squared(vars[epsi_start + t] - ref_epsi);// *(t + 2);// (t + 5); //minimize direction error
-      fg[0] += v_factor * squared(vars[v_start + t] - ref_v);// (t + 5); //try to maintain a target speed
+      fg[0] += v_factor * squared(vars[v_start + t] - ref_v);//try to maintain a target speed
     }
 
     // Minimize the use of actuators.
     for (t = 0; t < N - 1; t++) {
-      fg[0] += steer_factor * squared(vars[delta_start + t] - ref_delta);// *(t + 3);// (t + 5);  //minimize steering angles
-      fg[0] += accel_factor * squared(vars[a_start + t] - ref_a);// (t + 5);  //minimize use of accelerator/brake
+      fg[0] += steer_factor * squared(vars[delta_start + t] - ref_delta);// *(t + 3);// minimize steering angles
+      fg[0] += accel_factor * squared(vars[a_start + t] - ref_a);// *(t + 5);  //minimize use of accelerator/brake
     }
 
     // Minimize the value gap between sequential actuations.
     for (t = 0; t < N - 2; t++)
     {
-      fg[0] += delta_factor * squared((vars[delta_start + t + 1] - vars[delta_start + t]) - ref_delta_delta);// (t + 5); //remove jerkiness in steering
-      fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a);// (t + 5); //remove jerkiness in acceleration/braking
+      fg[0] += delta_factor * squared((vars[delta_start + t + 1] - vars[delta_start + t]) - ref_delta_delta);// remove jerkiness in steering
+      fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a);// remove jerkiness in acceleration/braking
     }
 
-    for (t = 2; t < N - 1; t++) //do't worry if start of 
+    for (t = 1; t < N - 1; t++) //do't worry if start of 
     {
-      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte);// *(t + 3);// (t + 5); //minimize change in cte (similar to steer reduction?
+      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte);//(t + 3) //minimize change in cte (similar to steer reduction?
     }
 
     //
@@ -182,9 +200,9 @@ class FG_eval {
 MPC::MPC() {}
 MPC::~MPC() {}
 
-vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, double desired_velocity) {
+vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, double desired_velocity, double time_interval, size_t timesteps) {
   bool ok = true;
-  size_t i;
+  size_t i; //general counter
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
   double x = state[0];
@@ -193,6 +211,16 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, double 
   double v = state[3];
   double cte = state[4];
   double epsi = state[5];
+
+  size_t N = timesteps;
+  size_t x_start = 0;
+  size_t y_start = x_start + N;
+  size_t psi_start = y_start + N;
+  size_t v_start = psi_start + N;
+  size_t cte_start = v_start + N;
+  size_t epsi_start = cte_start + N;
+  size_t delta_start = epsi_start + N;
+  size_t a_start = delta_start + N - 1;
 
   // TODO: Set the number of model variables (includes both states and inputs).
   // For example: If the state is a 4 element vector, the actuators is a 2
@@ -267,7 +295,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, double 
   constraints_upperbound[epsi_start] = epsi;
 
   // object that computes objective and constraints
-  FG_eval fg_eval(coeffs, desired_velocity);
+  FG_eval fg_eval(coeffs, desired_velocity, time_interval, timesteps);
 
   //
   // NOTE: You don't have to worry about these options

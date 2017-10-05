@@ -73,7 +73,7 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
 
 
 
-int run_message_loop(double velocity)
+int run_message_loop(double velocity, double stepduration, size_t stepcount)
 {
   int step = 0;
   long latency_delay = 100;// mSeconds
@@ -89,8 +89,9 @@ int run_message_loop(double velocity)
   MPC mpc;
   
 
-  h.onMessage([&mpc, &step, &order, &old_ptsx0, &old_ptsx1, &old_ptsy0, &old_ptsy1, &latency_delay, &velocity](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
-                     uWS::OpCode opCode) {
+  h.onMessage([&mpc, &step, &order, &old_ptsx0, &old_ptsx1, &old_ptsy0, &old_ptsy1, &latency_delay, &velocity, &stepduration, &stepcount]
+    (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
+  {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -106,7 +107,7 @@ int run_message_loop(double velocity)
         if (event == "telemetry") {
 
           //step += 1;
-          cout << "step = " << ++step << ", " << endl;
+          cout << "step = " << ++step << ": " ;
 
           // j[1] is the data JSON object 
           vector<double> ptsx = j[1]["ptsx"];
@@ -191,27 +192,29 @@ int run_message_loop(double velocity)
 
                   
           // Calculate a slightly better approximation of CTE
-          // assume track near linear between waypoint behind car now (ptsx[1], ptsy[1]) and (0,cte)
+          // assume track near linear at location of waypoint (0,cte)
           // use this to calculate angle of waypoint path
 
-          //calculate a point on the polyline close to the cte to get a decent estimation of slope 
+          //calculate a point on the polyline close to the cte to get a decent estimation of direction of line
+          // this could become erroneous if the car is at a very large angle to the track, and the polyline is very curvy
+          // could do a recursive check
           double pt1 = polyeval(coeffs, -1.0) - 0.0;
-          
-          double angle = atan2(cte - pt1, 0.0 - (-1));
-          //cout << "translate (x1,y1) = ("<< ptsx[1] << ", " << ptsy[1] << "), (x2, y2) = (0.0, " << cte << "), angle = " << angle  endl;
-          cout << "translate (x1,y1) = (" << -1.0 << ", " << pt1 << "), (x2, y2) = (0.0, " << cte << "), angle = " << angle << endl;
-          //run the transform using           
+          double pt2 = polyeval(coeffs, 1.0) - 0.0;        
+          double angle = atan2(pt2 - pt1, 1.0 - (-1));
+          //cout << "translate (x1,y1) = (" << -1.0 << ", " << pt1 << "), (x2, y2) = (1.0, " << pt2 << "), angle = " << angle << endl;
+          //run the transform using the current location of the cte on the polyline, and the line direction          
           transform_coords tc1(0, cte, angle);
+          //now transform the car co-ordinates to the reference of the polyline
           trans_p = tc1.transform(0, 0);
           double cte1 = trans_p[1];
-          cout << "cte1 is at: (" << trans_p[0] << ", "<< trans_p[1] << "). CTE Difference of " << (-cte1-cte) << " from " << cte << endl;
+          //cout << "cte1 is at: (" << trans_p[0] << ", "<< trans_p[1] << "). CTE Difference of " << (-cte1-cte) << " from " << cte << endl;
           cte = -cte1;
 
           //exit if car has left track 
           if (fabs(cte) > 10.0)
           {
             cout << endl << endl;
-            cout << "ERROR:: Car off track - cte value exceeds 5 - EXITING!" << endl << endl;
+            cout << "ERROR:: Car off track - cte value exceeds 10 - EXITING!" << endl << endl;
             exit(-1);
           }
 
@@ -225,7 +228,7 @@ int run_message_loop(double velocity)
           Eigen::VectorXd state(6);
           // remember px, py, psi changed to cars perspective (0,0,0)
           state << 0.0, 0.0, 0.0, v, cte, epsi;
-          auto vars = mpc.Solve(state, coeffs, velocity);
+          auto vars = mpc.Solve(state, coeffs, velocity, stepduration, stepcount);
           
           double steer_value = vars[0] / (0.436332 * Lf);  //convert from rads to 1 unit  = 25 degrees = 0.436332 rads
           double throttle_value = vars[1];
@@ -239,8 +242,8 @@ int run_message_loop(double velocity)
           //make 
           for (int i = 0; i < num_points; i++)
           {
-            next_x_vals.push_back((i + 1)*poly_inc);
-            next_y_vals.push_back( polyeval(coeffs, (i + 1)*poly_inc) );
+            next_x_vals.push_back((i + 1.5)*poly_inc);
+            next_y_vals.push_back( polyeval(coeffs, (i + 1.5)*poly_inc) );
           }
 
           //Display the MPC predicted trajectory
@@ -323,7 +326,11 @@ int run_message_loop(double velocity)
 
 
 int main(int argc, char *argv[ ]) {
-  double velocity_goal = 5.00;
+  double velocity_goal = 40.00;
+  //defaults
+  double stepduration = 0.05;
+  size_t stepcount = 24;
+
   if (argc == 2)
   {
     cout << "The initial velocity argument supplied is " << argv[1] << endl;
@@ -333,6 +340,28 @@ int main(int argc, char *argv[ ]) {
       velocity_goal = tmp_vel;
     }
   }
+  else if (argc == 4)
+  {
+    cout << "The initial velocity argument supplied is " << argv[1] << endl;
+    double tmp_vel = atof(argv[1]);
+    if (tmp_vel > 0 and tmp_vel < 100)
+    {
+      velocity_goal = tmp_vel;
+    }
+    cout << "The initial stepduration argument supplied is " << argv[2] << endl;
+    double tmp_stepduration = atof(argv[2]);
+    if (tmp_stepduration > 0.01 and tmp_stepduration < 0.5)
+    {
+      stepduration = tmp_stepduration;
+    }
+    cout << "The initial stepcount argument supplied is " << argv[3] << endl;
+    size_t tmp_stepcount = atoi(argv[3]);
+    if (tmp_stepcount > 3 and tmp_stepcount < 31)
+    {
+      stepcount = tmp_stepcount;
+    }
+
+  }
   else
   {
     cout << "To specify the velocity goal to use at run time call " << endl << endl;
@@ -340,8 +369,15 @@ int main(int argc, char *argv[ ]) {
     cout << "like this:" << endl << argv[0] << " 55" << endl;
     cout << "velocity goal should be a float between 1 and 100." << endl;
     cout << "Otherwise, " << velocity_goal << " will be used by default." << endl;
+    cout << "You can also adjust the stepduration and stepcount " << endl << endl;
+    cout << argv[0] << " velocity stepduration stepcount" << endl << endl;
+    cout << "like this:" << endl << argv[0] << " 55 0.05 20" << endl;
+    cout << "stepduration should be a float between 0.01 and 0.50." << endl;
+    cout << "stepcount should be between 4 and 30." << endl;
+    cout << "Otherwise, " << velocity_goal << ", " << stepcount << ", " << stepduration <<" will be used by default." << endl;
+
   }
 
-  run_message_loop(velocity_goal);
+  run_message_loop(velocity_goal, stepduration, stepcount);
 
 }
