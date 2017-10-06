@@ -77,7 +77,7 @@ int run_message_loop(double velocity, double stepduration, size_t stepcount)
 {
   int step = 0;
   long latency_delay = 100;// mSeconds
-  int order = 3;// 3;//polyfit equation of this order
+  int order = 2;// 3;//polyfit equation of this order
   uWS::Hub h;
   // this works for start at beginning of track - could put whole waypoint array in here to make more robust.
   double old_ptsx0 = -24.01;
@@ -181,10 +181,10 @@ int run_message_loop(double velocity, double stepduration, size_t stepcount)
 
           //find coefficients to fit for order polynomial to waypoints
           auto coeffs = polyfit(xvals, yvals, order);
-  //        for (i = 0; i < coeffs.size( ); i++)
-  //        {
-  //          cout << "coeffs[" << i << "] = " << coeffs[i] << endl;
-  //        }
+          for (i = 0; i < coeffs.size( ); i++)
+         {
+            cout << "coeff[" << i << "] = " << coeffs[i] << " ";
+         }
 
           //since px and py translated to 0,0 to car perspective
           double cte = polyeval(coeffs, 0.0) - 0.0;
@@ -326,10 +326,10 @@ int run_message_loop(double velocity, double stepduration, size_t stepcount)
 
 
 int main(int argc, char *argv[ ]) {
-  double velocity_goal = 40.00;
+  double velocity_goal = 70.00;
   //defaults
   double stepduration = 0.05;
-  size_t stepcount = 24;
+  size_t stepcount = 16;
 
   if (argc == 2)
   {
@@ -339,6 +339,17 @@ int main(int argc, char *argv[ ]) {
     {
       velocity_goal = tmp_vel;
     }
+
+    if (velocity_goal > 74)
+    {
+      stepcount = 12;
+    }
+    else if (velocity_goal >= 45)
+    {
+      stepcount = 24 - int((velocity_goal - 45) / 5 * 2);
+    }else
+      stepcount = 24;
+    cout << stepcount << " steps of duration, " << stepduration << " seconds will be used by default." << endl;
   }
   else if (argc == 4)
   {

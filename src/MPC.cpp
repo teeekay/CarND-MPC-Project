@@ -30,6 +30,8 @@ public:
   double delta_a_factor;
   double delta_cte_factor;
 
+  double curve_bias;
+
   FG_eval(Eigen::VectorXd coeffs, double desired_velocity, double time_interval, size_t timesteps)
   {
     this->coeffs = coeffs;
@@ -40,11 +42,12 @@ public:
     {
       dt = 0.05;
       //bias against cte
-      cte_factor = 7500;//5000;// 2000 - was good;//2000// 350.0;//500.0
+      cte_factor = 4000;
+      //cte_factor = 7500;//5000;// 2000 - was good;//2000// 350.0;//500.0
       //bias against steer error
       epsi_factor = 500.0;//500;//5000
       //bias against changing velocity from a good speed
-      v_factor = 5.0;
+      v_factor = 30.0;
       //bias against large steer in cost funcs
       steer_factor = 0.0;//0.5;
       //bias against large accel/deccel in cost funcs
@@ -69,6 +72,22 @@ public:
       delta_a_factor = 10.0;
       delta_cte_factor = 22500.0;
     }
+    if (desired_velocity > 70)
+    {
+      ref_cte = -coeffs[2] * (620 + 25 * (desired_velocity - 70));// 600);
+    }
+    else if (desired_velocity > 50)
+    {
+      ref_cte = -coeffs[2] * (300 + 16 * (desired_velocity-50));// 600);
+    }
+    else
+    {
+      ref_cte = -coeffs[2] * 6 * desired_velocity;
+    }
+    //ref_cte = 0.0;
+    // do check to cut inside corner
+    
+    
     cout << "fg set dt = " << this->dt << ", for " << this->N << " timesteps." << endl;
   }
 
@@ -81,7 +100,7 @@ public:
 
   //
   double ref_epsi = 0.0;
-  double ref_cte = 0.0;
+  double ref_cte;// = 0.0;
   double ref_delta = 0.0; // keep steering close to straight as possible
   double ref_delta_a = 0.0;
   double ref_delta_delta = 0.0;
@@ -130,7 +149,7 @@ public:
 
     for (t = 1; t < N - 1; t++) //do't worry if start of 
     {
-      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte);//(t + 3) //minimize change in cte (similar to steer reduction?
+      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t])) - ref_cte * 0.2; //minimize change in cte (similar to steer reduction?
     }
 
     //
@@ -267,7 +286,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, double 
   // Acceleration/decceleration upper and lower limits.
   // try using -0.5 , 0.5
   for (i = a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = 0.0;// -1.0;
+    vars_lowerbound[i] = 0.05;// -1.0;
     vars_upperbound[i] = 0.95;// 1.0;
   }
 
