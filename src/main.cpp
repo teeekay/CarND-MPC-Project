@@ -78,6 +78,10 @@ int run_message_loop(double velocity, double stepduration, size_t stepcount)
   int step = 0;
   long latency_delay = 100;// mSeconds
   int order = 2;// 3;//polyfit equation of this order
+  if (velocity < 50)
+  {
+    order = 3;
+  }
   uWS::Hub h;
   // this works for start at beginning of track - could put whole waypoint array in here to make more robust.
   double old_ptsx0 = -24.01;
@@ -329,7 +333,7 @@ int main(int argc, char *argv[ ]) {
   double velocity_goal = 70.00;
   //defaults
   double stepduration = 0.05;
-  size_t stepcount = 16;
+  size_t stepcount = 14;
 
   if (argc == 2)
   {
