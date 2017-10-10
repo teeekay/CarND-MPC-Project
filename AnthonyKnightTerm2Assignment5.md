@@ -48,7 +48,9 @@ In our model, the following equations are used to determine the new position, sp
 
 ### Number and Duration of Timesteps in Model
 
-I initially tested the use of a time interval of 0.05 s and tuned other parameters to allow the car to go around the track at speeds of 40 mph.  I found that the optimal value of N (number of timesteps) to use was 22 at this speed, resulting in a horizon of about 1.1 seconds.  I tested these parameters when switching to using a timestep of duration of 0.1s, and found I had to retune the parameters and reduce the number of timesteps to 12.  I generally found that reducing the number of timesteps below the optimal rate made the car go straighter but potentially in the wrong direction, whereas increasing the number of timesteps beyond the optimal value range increased wobbles particularly after exiting a curve.
+I initially tested the use of a time interval of 0.05 s and tuned other parameters to allow the car to go around the track at speeds of 40 mph.  I found that the optimal value of N (number of timesteps) to use was 22 at this speed, resulting in a horizon of about 1.1 seconds.  I tested these parameters when switching to using a timestep of duration of 0.1s, and found I had to retune the parameters and reduce the number of timesteps to 12.  I generally found that reducing the number of timesteps below the optimal rate made the car go straighter but potentially in the wrong direction, whereas increasing the number of timesteps beyond the optimal value range increased wobbles particularly after exiting a curve.  
+
+Any increase in computation time required in the solver routine due to an increased number of timesteps (up to 22) was not observed to be a problem affecting results on my PC.  However, in the event of being constrained by processing power, this could be a reason to use a longer timestep interval which would require less timesteps to solve.
 
 After tuning other parameters extensively I developed the following relationship between the optimal number of timesteps and the desired velocity when using a timestep of 0.05 seconds duration (shown in figure below).
 
@@ -59,6 +61,62 @@ Interestingly, as shown in the diagram below, this produced horizon lengths whic
 <img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/OptimalHorizonDistance.png?raw=true"  width=400>
 
 
+
+
+
+### Solver Cost Equations
+
+The following equations were used to calculate the cost of a specific set of actuator values at each time setting.
+
+I initially determined the desired speed in m/s and the desired throttle actuator value corresponding to acceleration.
+
+```C++
+    ref_v = desired_velocity * 1609 / 3600;
+    ref_a = desired_velocity / 100;
+```
+
+The costs were then calculated to minimize cross track error, difference in direction, and difference in velocity from the desired values at each time step.
+
+```C++
+// Minimize cross track error, incorrect direction, and velocity.
+    for (t = 0; t < N - 1; t++) {
+      fg[0] += cte_factor * squared(vars[cte_start + t] - ref_cte);    //minimize cross track error
+      fg[0] += epsi_factor * squared(vars[epsi_start + t] - ref_epsi); //minimize direction error
+      fg[0] += v_factor * squared(vars[v_start + t] - ref_v);          //try to maintain a target speed
+    }
+```
+
+I added the calculations below adding costs for steering (I ended up rating the cost of steering at 0 in my solutions), and for using an acceleration rate other than the desired rate.
+
+```C++
+    // Minimize the use of actuators.
+    for (t = 0; t < N - 1; t++) {
+      fg[0] += steer_factor * squared(vars[delta_start + t] - ref_delta); //minimize steering angles
+      fg[0] += accel_factor * squared(vars[a_start + t] - ref_a);         //minimize use of accelerator/brake
+    }
+```
+
+I also added costs for changing the steering angle and acceleration rate between timesteps in the solver.
+
+```C++
+    // Minimize the value gap between sequential actuations.
+    for (t = 0; t < N - 2; t++)
+    {
+      fg[0] += delta_factor * squared((vars[delta_start + t + 1] - vars[delta_start + t]) - ref_delta_delta); //remove jerkiness in steering
+      fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a); //remove jerkiness in acceleration/braking
+    }
+```
+
+Finally I added in a cost for changing the cross track error between steps, which should bias towards distributing the movement towards the waypoint path over the length of the horizon. 
+
+```C++
+    for (t = 1; t < N - 1; t++) //do't worry if start of 
+    {
+      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte); //minimize change in cte between timesteps - straighten curve
+    }
+```
+
+The following sets of factors applied in the equations above were experimentally determined in the simulator for time intervals of 0.05 and 0.1s
 
 ### <b>Table 1:</b>
 |Timestep | 0.05s|
@@ -88,58 +146,16 @@ Interestingly, as shown in the diagram below, this produced horizon lengths whic
 
 
 
-### Solver Equations
-
-```C++
-    ref_v = desired_velocity * 1609 / 3600;
-    ref_a = desired_velocity / 100;
-```
-
-```C++
-// Minimize tcross track error, incorrect direction, and velocity.
-    for (t = 0; t < N - 1; t++) {
-      fg[0] += cte_factor * squared(vars[cte_start + t] - ref_cte);    //minimize cross track error
-      fg[0] += epsi_factor * squared(vars[epsi_start + t] - ref_epsi); //minimize direction error
-      fg[0] += v_factor * squared(vars[v_start + t] - ref_v);          //try to maintain a target speed
-    }
-```
-
-
-```C++
-    // Minimize the use of actuators.
-    for (t = 0; t < N - 1; t++) {
-      fg[0] += steer_factor * squared(vars[delta_start + t] - ref_delta); //minimize steering angles
-      fg[0] += accel_factor * squared(vars[a_start + t] - ref_a);         //minimize use of accelerator/brake
-    }
-```
-
-```C++
-    // Minimize the value gap between sequential actuations.
-    for (t = 0; t < N - 2; t++)
-    {
-      fg[0] += delta_factor * squared((vars[delta_start + t + 1] - vars[delta_start + t]) - ref_delta_delta); //remove jerkiness in steering
-      fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a); //remove jerkiness in acceleration/braking
-    }
-```
-
-```C++
-    for (t = 1; t < N - 1; t++) //do't worry if start of 
-    {
-      fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t]) - ref_cte); //minimize change in cte between timesteps - straighten curve
-    }
-```
-
-
 ### Waypoint Polynomial fit
 
 I initially used a third order polynomial fit to the 6 waypoints provided using the provided polyfit function.  However, I found that on some timesteps the polynomial line "jogged" to one side at the end of the line close to the car.  This resulted in the car moving to the side at this point also. I attempted to resolve this "feature" by inserting an earlier control waypoint at the start of the line (storing the first waypoint between program iterations, and then inserting as the initial waypoint).  However, fitting the curve to an additional waypoint caused problems when the curve became more complex.  I "fixed" this by removing the final set of waypoints so the curve only had to fit 6 waypoints again.  
 
-During tuning I ran a test where I used 2nd order polynomial fit instead.  This provided better results on the track, possibly because each curve segment on the track can easily be modelled by a 2nd order polynomial, and the solver does not try to compensate for future curves in the opposite direction to the upcoming curve.
+During tuning runs, I ran an experiment where I used 2nd order polynomial fit instead of a third order fit.  This provided better results on the track, possibly because each curve segment on the track can easily be modeled by a 2nd order polynomial, and the solver does not try to compensate for future curves in the opposite direction to the upcoming curve.
 
 
 ### Latency
 
-The solution I implemented to get around a known 100 mS delay in applying actuator values was to calculate the approximate pose of the car 100 mSecs into the future, based on the known location, speed, direction and steering angle of the car (and disregarding effects of acceleration or changes in steering during this interval).  This projected position is then used to calculate the relative locations of the waypoints and the cte before solving.  
+The solution I implemented to get around a known 100 mS delay in applying actuator values was to calculate the approximate pose of the car 100 mSecs into the future, based on the known location, speed, direction and steering angle of the car (and disregarding effects of acceleration or changes in steering during this interval).  This projected position is then used to calculate the relative locations of the waypoints and the cte before attempting to solve for the lowest cost fit.  
 
 ``` C++
           px = px + (v * CppAD::cos(psi) * (latency_delay/1000.0));
@@ -147,12 +163,12 @@ The solution I implemented to get around a known 100 mS delay in applying actuat
           psi = psi - (v / Lf * steer / (0.436332 * Lf) * (latency_delay/1000.0));
 ```
 
-A solution could also have been implemented within the model solver where actuator settings are not applied until after 0.1 seconds.  However, this would have relied on the latency being a multiple of the model step length to get good results.
+A solution could also have been implemented within the model where actuator settings are not applied until after 0.1 seconds.  However, this would have relied on the latency being a multiple of the model step length to get good results.
 
 
 ## Additional Experiments
 
-I ran a couple of tests to see if increasing the cost of actions further in the future would result in quicker responses.  I multiplied the cost of state and actuator errors by (t + tunable_constant), where the tunable constant was an integer between 2 and N/2.  The initial tests did not produce observably better results, so I abandoned this approach.
+I ran a couple of tests to see if increasing the cost of actions further in the future would result in earlier responses.  I multiplied the cost of state and actuator errors by (t + tunable_constant), where the tunable constant was an integer between 2 and N/2.  The initial tests did not produce observably better results, so I abandoned this approach.
 
 ### Curve Direction and Sharpness
 
@@ -183,12 +199,13 @@ The following figure shows a map of the waypoints on the track, and I have label
 
 <img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/Waypoints.png?raw=true"  width=400>
 
-The critical area of the track where my implementation of the MPC controller had the most problems was in or after curve number 3, where the car would either hit the concrete barrier on the outside of the main curve or hit the concrete barrier on the opposite side of the track after coming through the curve.  In order to push the maximum speed higher on this track, I globally biased the value of the second coefficient used to calculate the reference_CTE when the speed increased beyond 70 mph.  This should result in the car moving to the right on the track.  I did not like this solution as it is only applicable to this track, and would cause the car to perform worse on a mirror track, or if the car had to travel in the opposite direction.
+The critical area of the track where my implementation of the MPC controller had the most problems was in or after curve number 3, where the car would either hit the concrete edge on the outside (left side) of the main curve or hit the concrete edge on the opposite (right) side of the track after coming through the curve.  In order to push the maximum speed higher on this track, I globally biased the value of the second coefficient used to calculate the reference_CTE when the speed increased beyond 70 mph.  This should result in the car moving to the right on the track.  I did not like this solution as it is only applicable to this track, and would cause the car to perform worse on other tracks, or even travelling around the same track in the opposite direction.
 
 
 ### Throttle Constraints (No Braking!)
 
-I did not like the way that braking (reverse throttle) was applied by the solver, generally finding that it was applied too late in curves.  This might be because the more dynamic model in the simulator produced different results than the kinematic model was predicting.  I decided to limit the solver to using coasting (zero throttle) as the only means whereby velocity could be reduced.
+I did not like the way that braking (reverse throttle) was applied by the solver, generally finding that it was applied too late in curves.  This might be because the more dynamic model in the simulator produced different results than the kinematic model was predicting.  I decided to limit the solver to using coasting (near zero throttle) as the only means whereby velocity could be reduced.  The throttle actuator was limited between 0.05 and 0.95.
+
 
 ### CTE
 
@@ -206,4 +223,3 @@ This solution could be recursively applied to deal with situations where the car
 -------
 
 <i>Note - I added transform_coords.cpp and transform_coords.h to the MPC project, and added them into CMakeLists.txt so that they would be integrated into the Makefile</i>.
-
