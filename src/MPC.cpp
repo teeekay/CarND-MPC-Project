@@ -41,23 +41,29 @@ public:
     if (time_interval == 0.05)
     {
       dt = 0.05;
-      //bias against cte
-      cte_factor = 4000;
-      //cte_factor = 7500;//5000;// 2000 - was good;//2000// 350.0;//500.0
-      //bias against steer error
-      epsi_factor = 500.0;//500;//5000
-      //bias against changing velocity from a good speed
+      //bias against cte - keep the predicted path close to the waypoint path
+      cte_factor = 4000; 
+
+      //bias against steer error - keep the angle of the predicted path similar to the angle of waypoints 
+      epsi_factor = 500.0;
+
+      //bias against changing velocity from desired speed
       v_factor = 30.0;
-      //bias against large steer in cost funcs
-      steer_factor = 0.0;//0.5;
-      //bias against large accel/deccel in cost funcs
+
+      //bias against large steering angles (smoother ride)
+      steer_factor = 0.0;
+
+      //bias against large accel/deccel (smoother ride)
       accel_factor = 10.0;
-      //bias against jerky steer in cost funcs
-      delta_factor = 1.0;//5.0 //2.0
-      //bias against large changes in accel/deccel in cost funcs
-      delta_a_factor = 3.0;//2.0
-      //bias against constantly changing cte 
-      delta_cte_factor = 750000;// 500000;//100000;// 10000;// 5000.0;//
+
+      //bias against jerky steer in cost funcs (smoother ride)
+      delta_factor = 1.0;
+
+      //bias against large changes in accel/deccel (smoother ride)
+      delta_a_factor = 3.0;
+
+      //bias against changing cte between steps - should cause solution to be parallel to waypoint path
+      delta_cte_factor = 750000;
     }
     else
     {
@@ -72,20 +78,21 @@ public:
       delta_a_factor = 10.0;
       delta_cte_factor = 22500.0;
     }
+
+    //ref_cte - adjust ref_cte so that predicted path should be biased to inside of waypoint curve
+    // optimal value needed to increase with velocity (also inversely to number of timesteps) 
     if (desired_velocity > 70)
     {
-      ref_cte = -coeffs[2] * (620 + 25 * (desired_velocity - 70));// 600);
+      ref_cte = (-coeffs[2]+0.0013) * (620 + 30 * (desired_velocity - 70));//25
     }
     else if (desired_velocity > 50)
     {
-      ref_cte = -coeffs[2] * (300 + 16 * (desired_velocity-50));// 600);
+      ref_cte = -coeffs[2] * (300 + 16 * (desired_velocity-50));
     }
     else
     {
       ref_cte = -coeffs[2] * 6 * desired_velocity;
     }
-    //ref_cte = 0.0;
-    // do check to cut inside corner
     
     
     cout << "fg set dt = " << this->dt << ", for " << this->N << " timesteps." << endl;

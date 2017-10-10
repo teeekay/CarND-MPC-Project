@@ -135,8 +135,17 @@ int run_message_loop(double velocity, double stepduration, size_t stepcount)
           if ((fabs(old_ptsx1 - ptsx[0]) > 0.1) or (fabs(old_ptsy1 - ptsy[0]) > 0.1))
           {
             //cout << "sliding waypoints along!" << endl;
-            old_ptsx0 = old_ptsx1;
-            old_ptsy0 = old_ptsy1;
+            //take into account starting mpc when car is not at expected starting point.
+            if (step == 1 and fabs(ptsx[0] - 32.16173) > 0.1)
+            {
+              old_ptsx0 = ptsx[0] - (ptsx[1] - ptsx[0]) / 3;
+              old_ptsy0 = ptsy[0] - (ptsy[1] - ptsy[1]) / 3;
+            }
+            else
+            {
+              old_ptsx0 = old_ptsx1;
+              old_ptsy0 = old_ptsy1;
+            }
             old_ptsx1 = ptsx[0];
             old_ptsy1 = ptsy[0];
           }
@@ -346,13 +355,18 @@ int main(int argc, char *argv[ ]) {
 
     if (velocity_goal > 74)
     {
-      stepcount = 12;
+      stepcount = 13;//12
     }
-    else if (velocity_goal >= 45)
+    else if (velocity_goal >= 50)
     {
-      stepcount = 24 - int((velocity_goal - 45) / 5 * 2);
+      stepcount = 22 - int((velocity_goal - 50) / 5 * 2);
+    }
+    else if (velocity_goal >= 34)
+    {
+      stepcount = 22;
     }else
-      stepcount = 24;
+      stepcount = 5 + ceil(0.5 * velocity_goal);
+
     cout << stepcount << " steps of duration, " << stepduration << " seconds will be used by default." << endl;
   }
   else if (argc == 4)

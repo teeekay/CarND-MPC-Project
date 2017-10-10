@@ -4,7 +4,7 @@
 ---
 
 
-<img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/MPC_Screenshot.png?raw=true"  width=600>
+<img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/MPC_Screenshot2.png?raw=true"  width=700>
 
 <i><u>Figure 1: Snapshot from MPC Video</u></i>
 
@@ -17,7 +17,7 @@ The model can be run from the build directory by calling
 ```sh
 $./mpc
 ```
-which will execute the model using a target velocity of 70 mph and 14 timesteps of 0.05s.
+which will execute the model using a target velocity of 70 mph and use 14 timesteps of 0.05s.
 
 Alternatively, you can specify a different target velocity like this:
 
@@ -29,19 +29,35 @@ You can also specify the timestep duration and number of timesteps from the CLI 
 $./mpc 55 0.1 12
 ```
 
-With the default settings, the car can safely go around the track at speeds of up to 75 mph.  At 75 mph and beyond the car will often run up against the concrete ledge.  The car will generally crash within a couple of laps at speeds of 85 mph and beyond. 
-
+With the default timestep settings, the car can safely go around the track at speeds of up to 75 mph.  At 75 mph and beyond the car will often run up against the concrete ledge.  The car will generally crash within a couple of laps at speeds of 85 mph and beyond. 
 
 ### Kinematic Car Model
-The model predictive controller utilizes a simplified Kinematic model, as opposed to a full dynamic model of the car.  It does not take into account factors like air resistance, road / tire friction, lateral forces, and gravity.  The model state consists of the car location (x,y), speed, direction, steering angle  
+The model predictive controller utilizes a simplified Kinematic model, as opposed to a full dynamic model of the car.  It does not take into account factors like air resistance, road / tire friction, lateral forces, and gravity.  The model state consists of the car location (x,y), speed, and direction (Psi).  The speed and direction of the car change over time based on acceleration and steering respectively.
 
-The car can be controlled by two actuators: throttle and steering.  The throttle rate does not correspond exactly to an acceleration rate, as a given throttle rate in the simulator will not be able to accelerate a car beyond a speed (in mph) approximately 100 times the throttle rate.  The steering is limited to +/- 25 degrees which is input as a control of -1 to 1.
+The car can be controlled by two actuators: throttle and steering.  The throttle rate does not correspond exactly to an acceleration rate, as a given throttle rate in the simulator will not be able to accelerate a car beyond a speed (in mph) approximately 100 times the throttle rate.  negative throttle rates act as reverse acceleration which is equivalent to braking.  The steering is limited to +/- 25 degrees which is input as a control of -1 to 1.
+
+In our model, the following equations are used to determine the speed and direction of the car based on the last known position and throttle and steering settings
+
 
 
 ### Number and Duration of Timesteps in Model
 I found different solutions using time intervals of 0.05 s and 0.1 s, both resulting in similar performance which could make it safely around the track with top speeds of about 50 mph without running onto the concrete verges.  I found a range of timesteps where the car could make it around the track at speeds of 
 
 ### <b>Table 1:</b>
+|Timestep | 0.05s|
+|:---|:--|
+|cte_factor | 4,000|
+|epsi_factor | 500|
+|v_factor | 30|
+|steer_factor | 0 |
+|accel_factor | 10|
+|delta_factor | 1|
+|delta_a_factor | 3|
+|delta_cte_factor | 750,000|
+ - work oks for 18 to 28 timesteps at desired speeds below 50 mph
+
+### <b>Table 2:</b>
+
 |Timestep | 0.1s|
 |:---|:-|
 |cte_factor | 3,750|
@@ -55,18 +71,6 @@ I found different solutions using time intervals of 0.05 s and 0.1 s, both resul
  - works ok when using 10 to 20 timesteps at desired speeds below 50 mph
 
 
-### <b>Table 2:</b>
-|Timestep | 0.05s|
-|:---|:--|
-|cte_factor | 7,500|
-|epsi_factor | 500|
-|v_factor | 5|
-|steer_factor | 0 |
-|accel_factor | 10|
-|delta_factor | 1|
-|delta_a_factor | 3|
-|delta_cte_factor | 750,000|
- - work oks for 18 to 28 timesteps at desired speeds below 50 mph
 
 generally as the number of timesteps is reduced below the acceptable range, the car drives in a straighter line, and is less affected by 
 
@@ -122,6 +126,16 @@ The solution I implemented to get around a known 100 mS delay in applying actuat
 
 ## Additional Experiments
 I attempted to see if increasing the cost of actions in the future would result in a quicker response
+
+### Determine if curve is concave to left or right and adjust car to inside of curve
+
+### Use different order polynomial fit
+
+### No braking
+
+### Timesteps
+
+Experimentally found the following optimal settings for timesteps based on desired velocity.
 
 ### CTE
 
