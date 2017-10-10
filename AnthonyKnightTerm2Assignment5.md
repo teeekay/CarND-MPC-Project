@@ -13,7 +13,8 @@
 ### Running MPC
 
 
-The model can be run from the build directory by calling 
+The model can be run from the build directory by calling:
+ 
 ```sh
 $./mpc
 ```
@@ -24,7 +25,9 @@ Alternatively, you can specify a different target velocity like this:
 ```sh
 $./mpc 85.
 ```
+
 You can also specify the timestep duration and number of timesteps from the CLI as follows:
+
 ```sh
 $./mpc 55 0.1 12
 ```
@@ -32,11 +35,12 @@ $./mpc 55 0.1 12
 With the default timestep settings, the car can safely go around the track at speeds of up to 75 mph.  At 75 mph and beyond the car will often run up against the concrete ledge.  The car will generally crash within a couple of laps at speeds of 85 mph and beyond. 
 
 ### Kinematic Car Model
+
 The model predictive controller utilizes a simplified Kinematic model, as opposed to a full dynamic model of the car.  It does not take into account factors like air resistance, road / tire friction, lateral forces, or gravity.  The model state consists of the car location (x,y), speed (v), and direction (Psi).  The speed and direction of the car change over time based on acceleration (a), and steering direction (delta) respectively.
 
-The car can be controlled by two actuators: throttle and steering.  The throttle rate does not correspond exactly to an acceleration rate, as a given throttle rate in the simulator will not be able to accelerate a car beyond a speed (in mph) approximately 100 times the throttle rate.  negative throttle rates act as reverse acceleration which is equivalent to braking.  The steering is limited to +/- 25 degrees which is input as a control of -1 to 1.
+The car can be controlled by two actuators: throttle and steering.  The throttle rate does not correspond exactly to an acceleration rate, as a given throttle rate in the simulator will not be able to accelerate a car beyond a speed (in mph) approximately 100 times the throttle rate.  Negative throttle rates act as reverse acceleration which is equivalent to braking.  The steering is limited to +/- 25 degrees which is input as a control of -1 to 1 to the simulator.
 
-In our model, the following equations are used to determine the new position, speed, and direction of the car at time t which is one interval dt after the last known position. Lf is a constant which is the distance from the front of the car to the centroid of the car mass.
+In our model, the following equations are used to determine the new position, speed, and direction of the car at time t which is one interval dt after the last known position.  Lf is a constant which is the distance from the front of the car to the centroid of the car mass.
 
 <img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/stateupdate.png?raw=true"  width=250>
 
@@ -44,13 +48,13 @@ In our model, the following equations are used to determine the new position, sp
 
 ### Number and Duration of Timesteps in Model
 
-I initially tested the use of a time interval of 0.05 s and tuned other parameters to allow the car to go around the track at speeds of 40 mph.  I found that the optimal value of N (number of timesteps) to use was 22 at this speed resulting in a horizon of about 1.1 seconds.  I tested these parameters when switching to using a timestep of duration of 0.1s, and found I had to retune the parameters and reduce the number of timesteps to 12.  I generally found that reducing the number of timesteps below the optimal rate made the car go straighter but potentially in the wrong direction, whereas increasing the number of timesteps increased wobbles particularly after exiting a curve.
+I initially tested the use of a time interval of 0.05 s and tuned other parameters to allow the car to go around the track at speeds of 40 mph.  I found that the optimal value of N (number of timesteps) to use was 22 at this speed, resulting in a horizon of about 1.1 seconds.  I tested these parameters when switching to using a timestep of duration of 0.1s, and found I had to retune the parameters and reduce the number of timesteps to 12.  I generally found that reducing the number of timesteps below the optimal rate made the car go straighter but potentially in the wrong direction, whereas increasing the number of timesteps beyond the optimal value range increased wobbles particularly after exiting a curve.
 
 After tuning other parameters extensively I developed the following relationship between the optimal number of timesteps and the desired velocity when using a timestep of 0.05 seconds duration (shown in figure below).
 
 <img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/OptimalTimesteps.png?raw=true"  width=400>
 
-Interestingly this produced horizon lengths which increased linearly to about 25 m for speeds below 50 mph, and then remained constant near this length until the speed increased beyond 85 mph (as shown in the diagram below)
+Interestingly, as shown in the diagram below, this produced horizon lengths which increased linearly to about 25 m for speeds below 50 mph, and then remained constant near this length until the speed increased beyond 85 mph 
 
 <img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/OptimalHorizonDistance.png?raw=true"  width=400>
 
@@ -147,6 +151,7 @@ A solution could also have been implemented within the model solver where actuat
 
 
 ## Additional Experiments
+
 I ran a couple of tests to see if increasing the cost of actions further in the future would result in quicker responses.  I multiplied the cost of state and actuator errors by (t + tunable_constant), where the tunable constant was an integer between 2 and N/2.  The initial tests did not produce observably better results, so I abandoned this approach.
 
 ### Curve Direction and Sharpness
@@ -158,7 +163,7 @@ I decided that the optimal path of the car (In order to allow it to make it arou
     // optimal value needed to increase with velocity (also inversely to number of timesteps) 
     if (desired_velocity > 70)
     {//Above 70 mph
-      ref_cte = (-coeffs[2]+0.0013) * (620 + 30 * (desired_velocity - 70));//25
+      ref_cte = (-coeffs[2]+0.0013) * (620 + 30 * (desired_velocity - 70));
     }
     else if (desired_velocity > 50)
     {//between 51 and 70 mph
@@ -171,8 +176,19 @@ I decided that the optimal path of the car (In order to allow it to make it arou
 ```
 
 
-### No braking
+### Critical Area of Track
 
+The following figure shows a map of the waypoints on the track, and I have labelled the main curves and direction of travel.  
+
+
+<img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/Waypoints.png?raw=true"  width=400>
+
+The critical area of the track where my implementation of the MPC controller had the most problems was in or after curve number 3, where the car would either hit the concrete barrier on the outside of the main curve or hit the concrete barrier on the opposite side of the track after coming through the curve.  In order to push the maximum speed higher on this track, I globally biased the value of the second coefficient used to calculate the reference_CTE when the speed increased beyond 70 mph.  This should result in the car moving to the right on the track.  I did not like this solution as it is only applicable to this track, and would cause the car to perform worse on a mirror track, or if the car had to travel in the opposite direction.
+
+
+### Throttle Constraints (No Braking!)
+
+I did not like the way that braking (reverse throttle) was applied by the solver, generally finding that it was applied too late in curves.  This might be because the more dynamic model in the simulator produced different results than the kinematic model was predicting.  I decided to limit the solver to using coasting (zero throttle) as the only means whereby velocity could be reduced.
 
 ### CTE
 
