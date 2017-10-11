@@ -154,7 +154,7 @@ public:
       fg[0] += delta_a_factor * squared((vars[a_start + t + 1] - vars[a_start + t]) - ref_delta_a);// remove jerkiness in acceleration/braking
     }
 
-    for (t = 1; t < N - 1; t++) //do't worry if start of 
+    for (t = 1; t < N - 1; t++) 
     {
       fg[0] += delta_cte_factor * squared((vars[cte_start + t + 1] - vars[cte_start + t])) - ref_cte * 0.2; //minimize change in cte (similar to steer reduction?
     }

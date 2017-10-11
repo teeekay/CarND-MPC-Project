@@ -199,7 +199,9 @@ The following figure shows a map of the waypoints on the track, and I have label
 
 <img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/Waypoints.png?raw=true"  width=400>
 
-The critical area of the track where my implementation of the MPC controller had the most problems was in or after curve number 3, where the car would either hit the concrete edge on the outside (left side) of the main curve or hit the concrete edge on the opposite (right) side of the track after coming through the curve.  In order to push the maximum speed higher on this track, I globally biased the value of the second coefficient used to calculate the reference_CTE when the speed increased beyond 70 mph.  This should result in the car moving to the right on the track.  I did not like this solution as it is only applicable to this track, and would cause the car to perform worse on other tracks, or even travelling around the same track in the opposite direction.
+The critical area of the track where my implementation of the MPC controller had the most problems was in or after curve number 3, where the car would either hit the concrete edge on the outside (left side) of the main curve or hit the concrete edge on the opposite (right) side of the track after coming through the curve.  In order to push the maximum speed higher on this track, I globally biased the value of the second coefficient used to calculate the reference_CTE when the speed increased beyond 70 mph.  This generally results in the car moving to the right on the track.  I did not like this solution as it is only applicable to this track, and would cause the car to perform worse on other tracks, or even travelling around the same track in the opposite direction.  The figure below shows how the reference_CTE value varied according to speed and on the direction of the curve (calculated for abs(coeff[2]) = 0.2).
+
+<img src="https://raw.githubusercontent.com/teeekay/CarND-MPC-Project/master/examples/OptimalRef_CTE.png?raw=true"  width=400>
 
 
 ### Throttle Constraints (No Braking!)
