@@ -187,7 +187,7 @@ A solution could also have been implemented within the model where actuator sett
 
 ### Increasing costs in future
 
-I ran a couple of tests to see if increasing the cost of actions further in the future would result in earlier responses that would enable better performance on the track.  I multiplied the cost of state and actuator errors by ```(t + tunable_constant)```, where the tunable constant was an integer between 2 and N/2.  The initial tests did not produce observably better results, so I abandoned this approach.
+I ran a couple of tests to see if increasing the cost of actions further in the future would result in earlier responses that would enable better performance on the track.  I multiplied the cost of state and actuator errors by ```(t + tunable_constant)```, where the tunable constant was an integer between 2 and N/2, and t was the iteration number.  The initial tests did not produce observably better results, so I abandoned this approach.
 
 ### Curve Direction and Sharpness
 
